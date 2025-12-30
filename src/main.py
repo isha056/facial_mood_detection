@@ -25,8 +25,19 @@ def main():
         return
 
     print("Loading model...")
-    model = tf.keras.models.load_model(MODEL_PATH)
+    # Import custom layer for transfer learning model
+    try:
+        from model_transfer import GrayscaleToRGB
+        custom_objects = {'GrayscaleToRGB': GrayscaleToRGB}
+    except ImportError:
+        custom_objects = None
+    model = tf.keras.models.load_model(MODEL_PATH, custom_objects=custom_objects)
     labels_map = load_labels()
+    
+    # Auto-detect input size from model
+    input_shape = model.input_shape
+    img_size = input_shape[1]  # Height (should be 48 or 96)
+    print(f"Model expects input size: {img_size}x{img_size}")
     
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
@@ -46,12 +57,12 @@ def main():
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
         for (x, y, w, h) in faces:
-            # ROI
+            # ROI - resize to model's expected input size
             roi_gray = gray[y:y+h, x:x+w]
-            roi_gray = cv2.resize(roi_gray, (48, 48))
+            roi_gray = cv2.resize(roi_gray, (img_size, img_size))
             roi_gray = roi_gray.astype('float') / 255.0
-            roi_gray = np.expand_dims(roi_gray, axis=0) # batch dim
-            roi_gray = np.expand_dims(roi_gray, axis=-1) # channel dim
+            roi_gray = np.expand_dims(roi_gray, axis=0)  # batch dim
+            roi_gray = np.expand_dims(roi_gray, axis=-1)  # channel dim
 
             # Predict
             prediction = model.predict(roi_gray, verbose=0)

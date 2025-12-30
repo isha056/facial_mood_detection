@@ -1,6 +1,8 @@
 import os
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.utils.class_weight import compute_class_weight
 from model import create_model
 import matplotlib.pyplot as plt
 
@@ -56,6 +58,24 @@ def train(epochs=50, batch_size=32):
     num_classes = len(train_generator.class_indices)
     print(f"Detected classes: {train_generator.class_indices}")
 
+    # ========== CLASS BALANCING ==========
+    # Compute class weights to handle imbalanced data (e.g., 'disgust' has only 436 samples)
+    class_labels = train_generator.classes
+    unique_classes = np.unique(class_labels)
+    
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=unique_classes,
+        y=class_labels
+    )
+    class_weight_dict = dict(zip(unique_classes, class_weights))
+    
+    print("Class weights (to balance underrepresented classes):")
+    for class_idx, weight in class_weight_dict.items():
+        class_name = [k for k, v in train_generator.class_indices.items() if v == class_idx][0]
+        print(f"  {class_name}: {weight:.3f}")
+    # =====================================
+
     # Create Model
     model = create_model(num_classes=num_classes)
 
@@ -73,14 +93,15 @@ def train(epochs=50, batch_size=32):
         restore_best_weights=True
     )
 
-    # Train
+    # Train with class weights
     history = model.fit(
         train_generator,
         steps_per_epoch=train_generator.samples // batch_size,
         epochs=epochs,
         validation_data=validation_generator,
         validation_steps=validation_generator.samples // batch_size,
-        callbacks=[checkpoint, early_stop]
+        callbacks=[checkpoint, early_stop],
+        class_weight=class_weight_dict  # <-- This balances training!
     )
 
     # Save final model
